@@ -1,25 +1,28 @@
 {
   "name": "rocket-base",
-  "description": "WhatsApp Base",
+  "description": "WhatsApp Base - RocketClient V4.1 Web",
   "version": "2.0.0",
   "author": "Xeuka",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
   "dependencies": {
-    "@adiwajshing/keyed-db": "*",
-    "@angstvorfrauen/baileys": "*",
-    "cfonts": "*",
-    "express": "^5.1.0",
-    "fs": "*",
-    "jimp": "0.16.0",
-    "libphonenumber-js": "*",
-    "libsignal-xeuka": "*",
-    "moment-timezone": "*",
-    "node-cache": "*",
-    "node-fetch": "*",
-    "open": "*",
-    "os": "*",
-    "path": "*",
-    "pino": "*",
-    "readline": "*",
-    "uuid": "*"
+    "@angstvorfrauen/baileys": "^6.7.5",
+    "@hapi/boom": "^10.0.1",
+    "cfonts": "^3.3.0",
+    "express": "^4.19.2",
+    "figlet": "^1.7.0",
+    "gradient-string": "^2.0.2",
+    "jimp": "^0.16.1",
+    "libphonenumber-js": "^1.10.59",
+    "moment-timezone": "^0.5.45",
+    "node-cache": "^5.1.2",
+    "pino": "^9.0.0",
+    "p-queue": "^8.0.1"
   }
 }

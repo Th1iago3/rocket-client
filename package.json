@@ -1,0 +1,25 @@
+{
+  "name": "rocket-base",
+  "description": "WhatsApp Base",
+  "version": "2.0.0",
+  "author": "Xeuka",
+  "dependencies": {
+    "@adiwajshing/keyed-db": "*",
+    "@angstvorfrauen/baileys": "*",
+    "cfonts": "*",
+    "express": "^5.1.0",
+    "fs": "*",
+    "jimp": "0.16.0",
+    "libphonenumber-js": "*",
+    "libsignal-xeuka": "*",
+    "moment-timezone": "*",
+    "node-cache": "*",
+    "node-fetch": "*",
+    "open": "*",
+    "os": "*",
+    "path": "*",
+    "pino": "*",
+    "readline": "*",
+    "uuid": "*"
+  }
+}

@@ -30,50 +30,6 @@ const app = express();
 
 app.use(express.json());
 
-// === CONFIGURAÇÕES ===
-const banner = cfonts.render("Rocket\nClient\nV4.1", {
-  font: "block",
-  align: "center",
-  colors: ["#ff0000", "#C00000"],
-  background: "transparent",
-  letterSpacing: 1,
-  lineHeight: 1,
-  space: true,
-  maxLength: "0",
-  gradient: true,
-  independentGradient: false,
-  transitionGradient: true,
-  env: "node"
-});
-
-const terminalWidth = process.stdout.columns || 80;
-
-function centerText(text) {
-  const padding = Math.floor((terminalWidth - text.length) / 2);
-  const spaces = " ".repeat(Math.max(0, padding));
-  const grad = gradient.gradient(['#ff0000', '#C00000']);
-  return spaces + grad(text);
-}
-
-// === BANNER ===
-figlet.text("RC", { font: "Bloody" }, (err, data) => {
-  if (err || !data) {
-    data = figlet.textSync("RC", { font: "Standard" });
-  }
-  const lines = data.split("\n");
-  const centeredLines = lines.map(line => {
-    const padding = Math.max(0, Math.floor((terminalWidth - line.length) / 2));
-    return " ".repeat(padding) + line;
-  });
-  const grad = gradient.gradient(['#ff0000', '#C00000']);
-  console.log(grad(centeredLines.join("\n")));
-
-  ["https://t.me/Einzelhandelskaufmann", "https://t.me/RocketClient2", "MadeByXeuka\n"].forEach(text => {
-    const padding = Math.max(0, Math.floor((terminalWidth - text.length) / 2));
-    console.log(grad(" ".repeat(padding) + text));
-  });
-});
-
 // === BAILEYS ===
 let sock;
 let sessionExists = false;

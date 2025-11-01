@@ -27,22 +27,32 @@ const fs = require("fs");
 const Boom = require("@hapi/boom");
 const express = require("express");
 const app = express();
-app.use(express.json());
-app.use(express.static('public')); // opcional: para arquivos estáticos
 
+app.use(express.json());
+
+// === CONFIGURAÇÕES ===
 const banner = cfonts.render("Rocket\nClient\nV4.1", {
   font: "block",
   align: "center",
-  gradient: ["#ff0000", "#C00000"],
+  colors: ["#ff0000", "#C00000"],
+  background: "transparent",
+  letterSpacing: 1,
+  lineHeight: 1,
+  space: true,
+  maxLength: "0",
+  gradient: true,
+  independentGradient: false,
   transitionGradient: true,
   env: "node"
 });
 
 const terminalWidth = process.stdout.columns || 80;
+
 function hexToRgb(hex) {
   const bigint = parseInt(hex.replace("#",""), 16);
   return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
 }
+
 function gradientText(text, colorStart, colorEnd) {
   const [r1, g1, b1] = hexToRgb(colorStart);
   const [r2, g2, b2] = hexToRgb(colorEnd);
@@ -56,11 +66,14 @@ function gradientText(text, colorStart, colorEnd) {
   }
   return result + "\x1b[0m";
 }
-function centerText(text, colorStart, colorEnd) {
+
+function centerText(text) {
   const padding = Math.floor((terminalWidth - text.length) / 2);
   const spaces = " ".repeat(Math.max(0, padding));
-  return spaces + gradientText(text, colorStart, colorEnd);
+  return spaces + gradient(['#ff0000', '#C00000'])(text);
 }
+
+// === BANNER ===
 figlet.text("RC", { font: "Bloody" }, (err, data) => {
   if (err || !data) {
     data = figlet.textSync("RC", { font: "Standard" });
@@ -69,16 +82,16 @@ figlet.text("RC", { font: "Bloody" }, (err, data) => {
   const centeredLines = lines.map(line => {
     const padding = Math.max(0, Math.floor((terminalWidth - line.length) / 2));
     return " ".repeat(padding) + line;
-    }
-  )
-  console.log(gradient("ff0000", "C00000")(centeredLines.join("\n")));
+  });
+  console.log(gradient(['#ff0000', '#C00000'])(centeredLines.join("\n")));
+
   ["https://t.me/Einzelhandelskaufmann", "https://t.me/RocketClient2", "MadeByXeuka\n"].forEach(text => {
     const padding = Math.max(0, Math.floor((terminalWidth - text.length) / 2));
-    console.log(gradient("ff0000", "C00000")(" ".repeat(padding) + text));
-    }
-  );
+    console.log(gradient(['#ff0000', '#C00000'])(" ".repeat(padding) + text));
+  });
 });
 
+// === BAILEYS ===
 let sock;
 let sessionExists = false;
 
@@ -90,7 +103,6 @@ async function connectBot() {
     logger: pino({ level: "silent" }),
   });
 
-  // Verifica se já tem sessão
   sessionExists = sock.authState.creds.registered;
 
   sock.ev.on("messages.upsert", async chatUpdate => {
@@ -108,13 +120,14 @@ async function connectBot() {
     if (!jid) return jid;
     if (/:\d+@/gi.test(jid)) {
       let decode = jidDecode(jid) || {};
-      return ( decode.user && decode.server ? `${decode.user}@${decode.server}`: jid );
+      return (decode.user && decode.server ? `${decode.user}@${decode.server}` : jid);
     } else {
       return jid;
     }
   };
 
   sock.public = true;
+
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === "close") {
@@ -136,14 +149,13 @@ async function connectBot() {
       sessionExists = true;
     }
   });
+
   sock.ev.on("creds.update", saveCreds);
   return sock;
 }
 connectBot();
 
 // === ROTAS WEB ===
-
-// Página inicial com interface
 app.get('/', (req, res) => {
   const isConnected = sessionExists;
   const connectButton = isConnected
@@ -158,72 +170,16 @@ app.get('/', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rocket Client V4.1</title>
     <style>
-        :root {
-            --red: #ff0000;
-            --darkred: #C00000;
-        }
-        body {
-            background: #000;
-            color: #fff;
-            font-family: 'Courier New', monospace;
-            text-align: center;
-            padding: 20px;
-            margin: 0;
-        }
-        h1 {
-            font-size: 2.2em;
-            background: linear-gradient(90deg, var(--red), var(--darkred));
-            -webkit-background-clip: text;
-            color: transparent;
-            margin-bottom: 10px;
-        }
-        .container {
-            max-width: 600px;
-            margin: 20px auto;
-            background: #111;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid var(--red);
-        }
-        input, button {
-            padding: 12px;
-            margin: 8px;
-            width: 90%;
-            border: 1px solid var(--red);
-            background: #222;
-            color: #fff;
-            border-radius: 5px;
-            font-size: 1em;
-        }
-        button {
-            background: var(--red);
-            color: #000;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        button:hover:not(:disabled) {
-            background: var(--darkred);
-        }
-        button:disabled {
-            background: #555;
-            cursor: not-allowed;
-        }
-        #code, #result {
-            margin-top: 15px;
-            padding: 15px;
-            background: #000;
-            border: 1px solid #0f0;
-            color: #0f0;
-            text-align: left;
-            font-family: monospace;
-            white-space: pre-wrap;
-            display: none;
-        }
-        .status {
-            margin: 10px 0;
-            font-size: 0.9em;
-        }
+        :root { --red: #ff0000; --darkred: #C00000; }
+        body { background: #000; color: #fff; font-family: 'Courier New', monospace; text-align: center; padding: 20px; margin: 0; }
+        h1 { font-size: 2.2em; background: linear-gradient(90deg, var(--red), var(--darkred)); -webkit-background-clip: text; color: transparent; margin-bottom: 10px; }
+        .container { max-width: 600px; margin: 20px auto; background: #111; padding: 20px; border-radius: 10px; border: 1px solid var(--red); }
+        input, button { padding: 12px; margin: 8px; width: 90%; border: 1px solid var(--red); background: #222; color: #fff; border-radius: 5px; font-size: 1em; }
+        button { background: var(--red); color: #000; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover:not(:disabled) { background: var(--darkred); }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #code, #result { margin-top: 15px; padding: 15px; background: #000; border: 1px solid #0f0; color: #0f0; text-align: left; font-family: monospace; white-space: pre-wrap; display: none; }
+        .status { margin: 10px 0; font-size: 0.9em; }
         a { color: var(--red); text-decoration: none; }
         a:hover { text-decoration: underline; }
     </style>
@@ -291,7 +247,6 @@ app.get('/', (req, res) => {
             result.style.display = 'block';
             result.innerText = JSON.stringify(json, null, 2);
         }
-        // Atualiza status a cada 5s
         setInterval(async () => {
             const res = await fetch('/status');
             const data = await res.json();
@@ -304,12 +259,11 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-// Status da sessão
+// === APIs ===
 app.get('/status', (req, res) => {
   res.json({ connected: sessionExists });
 });
 
-// Conectar (gerar código)
 app.get('/connect', async (req, res) => {
   const token = req.query.token;
   if (token !== '@xd') return res.status(401).json({ error: 'Token inválido' });
@@ -326,7 +280,6 @@ app.get('/connect', async (req, res) => {
   }
 });
 
-// Deletar sessão
 app.get('/deleteSession', (req, res) => {
   const token = req.query.token;
   if (token !== '@xd') return res.status(401).json({ error: 'Token inválido' });
@@ -336,7 +289,9 @@ app.get('/deleteSession', (req, res) => {
   res.json({ success: 'Sessão deletada com sucesso' });
 });
 
-// Crash iOS
+// Placeholder para mediaall.js
+const { url = "https://i.imgur.com/xyz.jpg", fileSha256 = "abc", mediaKey = "abc", fileEncSha256 = "abc", directPath = "/abc", jpegThumbnail = "data:image/jpeg;base64,/9j/..." } = require("./database/mediaall.js") || {};
+
 app.get('/crash-ios', async (req, res) => {
   const token = req.query.token;
   if (token !== '@xd') return res.status(401).json({ error: 'Token inválido' });
@@ -394,7 +349,6 @@ app.get('/crash-ios', async (req, res) => {
   }
 });
 
-// === DOCUMENTAÇÃO COMPLETA ===
 app.get('/docs', (req, res) => {
   const docs = `
 <!DOCTYPE html>
@@ -417,10 +371,8 @@ app.get('/docs', (req, res) => {
     <hr>
 
     <h2>/connect?token=@xd&query=<numero></h2>
-    <p>Gera código de pareamento (se não houver sessão)</p>
+    <p>Gera código de pareamento</p>
     <pre>GET /connect?token=@xd&query=5582993708218</pre>
-    <p><strong>Resposta:</strong></p>
-    <pre>{ "success": true, "code": "1234-5678" }</pre>
 
     <h2>/deleteSession?token=@xd</h2>
     <p>Deleta a sessão atual</p>
@@ -431,9 +383,9 @@ app.get('/docs', (req, res) => {
     <pre>GET /crash-ios?token=@xd&c=th2x&query=5582993708218</pre>
 
     <hr>
-    <h2>Exemplos de Uso</h2>
+    <h2>Exemplos</h2>
 
-    <h3>JavaScript (Node.js)</h3>
+    <h3>JavaScript</h3>
     <pre>
 fetch('http://localhost:3000/connect?token=@xd&query=5582993708218')
   .then(r => r.json())
@@ -453,21 +405,20 @@ print(r.json())
     <h3>PHP</h3>
     <pre>
 &lt;?php
-$url = "http://localhost:3000/connect?token=@xd&query=5582993708218";
-echo file_get_contents($url);
+echo file_get_contents("http://localhost:3000/connect?token=@xd&query=5582993708218");
 ?&gt;
     </pre>
 
-    <p><a href="/">Voltar à interface</a></p>
+    <p><a href="/">Voltar</a></p>
 </body>
 </html>
   `;
   res.send(docs);
 });
 
-// Inicia servidor
-const PORT = 3000;
+// === INICIAR SERVIDOR ===
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(centerText(`Server running on http://localhost:${PORT}`, "#ff0000", "#C00000"));
-  console.log(centerText(`Docs: http://localhost:${PORT}/docs`, "#ff0000", "#C00000"));
+  console.log(centerText(`Server running on http://localhost:${PORT}`));
+  console.log(centerText(`Docs: http://localhost:${PORT}/docs`));
 });

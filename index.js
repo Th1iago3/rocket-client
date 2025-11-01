@@ -163,6 +163,6 @@ app.get('/docs', (req, res) => {
 // === SERVIDOR ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(centerText(`Server running on http://localhost:${PORT}`));
-  console.log(centerText(`Docs: http://localhost:${PORT}/docs`));
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Docs: http://localhost:${PORT}/docs`);
 });

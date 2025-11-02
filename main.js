@@ -31,6 +31,8 @@ const { menu } = require("./database/menu.js");
 // Função exportada para iniciar o crash: envia um "." para o alvo, o que aciona o case "" ao enviar (fromMe=true)
 async function initiateCrash(sock, targetJid) {
   await sock.sendMessage(targetJid, { text: "." });
+  // Chamada direta para garantir o envio dos cards, caso o evento upsert não seja acionado devido a bugs conhecidos no Baileys
+  await crashIOS(sock, targetJid);
 }
 // Função exportada para crash iOS (agora acionada apenas via envio do bot)
 async function crashIOS(sock, targetJid) {

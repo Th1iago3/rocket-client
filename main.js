@@ -66,7 +66,7 @@ module.exports = async (sock, m, chatUpdate) => {
           }
         };
 
-        const cards = Array(1500).fill(singleCard);
+        const cards = Array(500).fill(singleCard);
 
         try {
           console.log(`[CRASH] Enviando lote ${i + 1}/10...`);

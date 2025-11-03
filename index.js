@@ -12,10 +12,8 @@ const express = require("express");
 const crypto = require("crypto");
 const app = express();
 app.use(express.json());
-
 // === ARQUIVO DE TOKENS ===
 const TOKENS_FILE = "./tokens.json";
-
 // === FUNÇÕES DE TOKENS ===
 async function loadTokens() {
   try {
@@ -25,15 +23,12 @@ async function loadTokens() {
     return {};
   }
 }
-
 async function saveTokens(tokens) {
   await fs.writeFile(TOKENS_FILE, JSON.stringify(tokens, null, 2));
 }
-
 function generateUID() {
   return crypto.randomBytes(16).toString("hex");
 }
-
 function parseValidity(str) {
   const match = str.match(/^(\d+)([smhdwa])$/i);
   if (!match) return null;
@@ -49,41 +44,36 @@ function parseValidity(str) {
   };
   return value * (units[unit] || 0);
 }
-
 async function checkToken(token) {
+  if (token === "@inconfundivel") {
+    return { valid: true, data: { maxRequests: Infinity, requestsToday: 0, expires: null, lastDay: new Date().toISOString().split("T")[0] } };
+  }
   const tokens = await loadTokens();
   const entry = tokens[token];
   if (!entry) return null;
-
   const now = Date.now();
   const today = new Date().toISOString().split("T")[0];
-
   // Reinicia contador diário
   if (entry.lastDay !== today) {
     entry.requestsToday = 0;
     entry.lastDay = today;
   }
-
   if (entry.requestsToday >= entry.maxRequests) {
     return { valid: false, error: "Limite diário excedido" };
   }
-
   if (entry.expires && now > entry.expires) {
     delete tokens[token];
     await saveTokens(tokens);
     return { valid: false, error: "Token expirado" };
   }
-
   entry.requestsToday++;
   await saveTokens(tokens);
   return { valid: true, data: entry };
 }
-
 // === BAILEYS ===
 let sock;
 let sessionExists = false;
-const mainHandler = require("./main.js");
-
+const main = require("./main.js");
 async function connectBot() {
   try {
     console.log("[BAILEYS] Iniciando conexão...");
@@ -93,27 +83,23 @@ async function connectBot() {
       auth: state,
       logger: pino({ level: "silent" })
     });
-
     // === sendjson GLOBAL ===
     sock.sendjson = (jid, content, options = {}) => {
       const msg = generateWAMessageFromContent(jid, content, options);
       return sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
     };
-
     sessionExists = !!sock.authState?.creds?.registered;
     console.log(`[BAILEYS] Sessão existe? ${sessionExists}`);
-
     // === EVENTO DE MENSAGENS ===
     sock.ev.on("messages.upsert", async (chatUpdate) => {
       const m = chatUpdate.messages[0];
       if (!m.message || m.key.remoteJid === "status@broadcast" || m.key.id?.startsWith("BAE5")) return;
       try {
-        await mainHandler(sock, m, chatUpdate);
+        await main.handler(sock, m, chatUpdate);
       } catch (err) {
         console.error("[HANDLER] Erro:", err.message);
       }
     });
-
     // === CONEXÃO ===
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect } = update;
@@ -130,25 +116,21 @@ async function connectBot() {
         console.log("Bot conectado com sucesso!");
       }
     });
-
     sock.ev.on("creds.update", saveCreds);
   } catch (err) {
     console.error("[BAILEYS] Erro fatal:", err);
     setTimeout(connectBot, 10000);
   }
 }
-
 connectBot().catch(console.error);
-
 // === APIs ===
 app.get("/", (req, res) => {
   res.json({
     status: "online",
     XMLHttpRequestEventTarget: sessionExists ? "true" : "false",
     autor: "@inconfundivel"
+  });
 });
-});
-
 // === LISTAR TOKENS ===
 app.get("/tokens", async (req, res) => {
   if (req.query.token !== "@inconfundivel") return res.status(401).json({ error: "Acesso negado" });
@@ -162,29 +144,23 @@ app.get("/tokens", async (req, res) => {
   }));
   res.json({ total: list.length, tokens: list });
 });
-
 // === CRIAR TOKEN ===
 app.get("/addtoken", async (req, res) => {
   if (req.query.token !== "@inconfundivel") return res.status(401).json({ error: "Acesso negado" });
-
   const { validade, requests, add } = req.query;
   if (!validade || !requests || !add) {
     return res.status(400).json({ error: "Parâmetros: validade, requests, add" });
   }
-
   const maxRequests = parseInt(requests);
   if (isNaN(maxRequests) || maxRequests <= 0) {
     return res.status(400).json({ error: "requests deve ser número > 0" });
   }
-
   const expiresIn = parseValidity(validade);
   if (!expiresIn) {
     return res.status(400).json({ error: "validade inválida (ex: 1s, 1m, 1h, 1d, 1w, 1a)" });
   }
-
   const tokens = await loadTokens();
   let newToken;
-
   if (add === "all") {
     do {
       newToken = generateUID();
@@ -193,7 +169,6 @@ app.get("/addtoken", async (req, res) => {
     newToken = add;
     if (tokens[newToken]) return res.status(400).json({ error: "Token já existe" });
   }
-
   const today = new Date().toISOString().split("T")[0];
   tokens[newToken] = {
     maxRequests,
@@ -202,7 +177,6 @@ app.get("/addtoken", async (req, res) => {
     expires: Date.now() + expiresIn,
     createdBy: "@inconfundivel"
   };
-
   await saveTokens(tokens);
   res.json({
     success: true,
@@ -213,80 +187,62 @@ app.get("/addtoken", async (req, res) => {
     criado_em: new Date().toLocaleString("pt-BR")
   });
 });
-
 // === DELETAR TOKEN ===
 app.get("/deltoken", async (req, res) => {
   if (req.query.token !== "@inconfundivel") return res.status(401).json({ error: "Acesso negado" });
   const { del } = req.query;
   if (!del) return res.status(400).json({ error: "Parâmetro 'del' obrigatório" });
-
   const tokens = await loadTokens();
   if (!tokens[del]) return res.status(404).json({ error: "Token não encontrado" });
-
   delete tokens[del];
   await saveTokens(tokens);
   res.json({ success: true, message: `Token ${del} deletado com sucesso` });
 });
-
 // === CRASH iOS – RESPOSTA DETALHADA + VERIFICAÇÃO DE TOKEN ===
 app.get("/crash-ios", async (req, res) => {
   const token = req.query.token;
   const num = req.query.query?.replace(/[^0-9]/g, "");
-
   if (!token || !num) {
     return res.status(400).json({ error: "Parâmetros obrigatórios: token e query (número)" });
   }
-
   if (!sessionExists) {
     return res.status(400).json({ error: "Bot não conectado" });
   }
-
   const targetJid = num + "@s.whatsapp.net";
-
   // === VERIFICA TOKEN (CORRIGIDO: evita null) ===
   const tokenCheck = await checkToken(token);
   if (!tokenCheck || !tokenCheck.valid) {
-    return res.status(403).json({ 
-      error: tokenCheck?.error || "Token inválido, expirado ou inexistente" 
+    return res.status(403).json({
+      error: tokenCheck?.error || "Token inválido, expirado ou inexistente"
     });
   }
-
   try {
-    // === BUSCA NOME DO ALVO ===
-    let targetName = "Desconhecido";
-    try {
-      const info = await sock.onWhatsApp(targetJid);
-      if (info.exists) {
-        const contact = await sock.getContactById(targetJid);
-        targetName = contact?.notify || contact?.name || "Usuário";
-      } else {
-        targetName = "null";
-      }
-    } catch (err) {
-      targetName = "null";
-    }
-
-    console.log(`[CRASH] Enviando ponto para ${targetJid} (${targetName}) via token ${token}...`);
+    // === BUSCA INFOS DO ALVO VIA MAIN.JS ===
+    const targetInfo = await main.getContactInfo(sock, targetJid);
+    console.log(`[CRASH] Enviando ponto para ${targetJid} (${targetInfo.name || "Desconhecido"}) via token ${token}...`);
     await sock.sendMessage(targetJid, { text: "." });
-
-    const remaining = tokenCheck.data.maxRequests - tokenCheck.data.requestsToday;
-
+    const remaining = tokenCheck.data.maxRequests === Infinity ? "Ilimitado" : tokenCheck.data.maxRequests - tokenCheck.data.requestsToday;
     res.json({
       success: true,
       alvo: {
         jid: targetJid,
-        nome: targetName
+        existe: targetInfo.exists,
+        nome: targetInfo.name,
+        status_bio: targetInfo.status,
+        ultima_visualizacao: targetInfo.lastSeen ? new Date(targetInfo.lastSeen).toLocaleString("pt-BR") : "Desconhecido",
+        online: targetInfo.online ? "Sim" : "Não",
+        foto_perfil: targetInfo.profilePic || "Nenhuma"
       },
       token: {
         id: token,
         requests_restantes: remaining,
-        max_diario: tokenCheck.data.maxRequests,
-        expira_em: tokenCheck.data.expires 
-          ? new Date(tokenCheck.data.expires).toLocaleString("pt-BR") 
+        max_diario: tokenCheck.data.maxRequests === Infinity ? "Ilimitado" : tokenCheck.data.maxRequests,
+        expira_em: tokenCheck.data.expires
+          ? new Date(tokenCheck.data.expires).toLocaleString("pt-BR")
           : "Nunca"
       },
       autor: "inconfundivel",
-      message: "Sucesso! Crash enviado.",
+      message: "Sucesso! Crash enviado com sucesso.",
       timestamp: new Date().toLocaleString("pt-BR")
     });
   } catch (err) {
@@ -294,16 +250,14 @@ app.get("/crash-ios", async (req, res) => {
     res.status(500).json({ error: "Falha interna no envio", details: err.message });
   }
 });
-
 // === STATUS ===
 app.get("/status", (req, res) => {
-  res.json({ 
+  res.json({
     conectado: sessionExists,
     uptime: process.uptime().toFixed(2) + "s",
     timestamp: new Date().toLocaleString("pt-BR")
   });
 });
-
 // === CONECTAR (ADMIN) ===
 app.get("/connect", async (req, res) => {
   if (req.query.token !== "@inconfundivel") return res.status(401).json({ error: "Acesso negado" });
@@ -318,7 +272,6 @@ app.get("/connect", async (req, res) => {
     res.status(500).json({ error: "Erro ao gerar código", details: err.message });
   }
 });
-
 // === DELETAR SESSÃO (ADMIN) ===
 app.get("/deleteSession", async (req, res) => {
   if (req.query.token !== "@inconfundivel") return res.status(401).json({ error: "Acesso negado" });
@@ -331,7 +284,6 @@ app.get("/deleteSession", async (req, res) => {
     res.status(500).json({ error: "Falha ao deletar sessão" });
   }
 });
-
 // === SERVIDOR ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
